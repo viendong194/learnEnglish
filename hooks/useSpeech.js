@@ -9,6 +9,28 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * @param {(text: string) => void} opts.onTranscript
  * @param {(err: any) => void} [opts.onError]
  */
+// Từ khoá nhận diện giọng chất lượng cao (giọng mạng/neural) thường có trên Android Chrome & Edge
+const HQ_HINTS = /google|neural|wavenet|natural|enhanced|premium|online/i;
+// Giọng "Compact" trên iOS/macOS là giọng nén chất lượng thấp, robot hơn hẳn giọng mặc định
+const LQ_HINTS = /compact/i;
+
+/** Chấm điểm và chọn giọng đọc tự nhiên nhất khớp locale trong số các giọng máy đã cài. */
+function pickBestVoice(voices, locale) {
+  const lang = locale.split('-')[0];
+  const candidates = voices.filter((v) => v.lang === locale || v.lang?.startsWith(lang));
+  if (!candidates.length) return null;
+
+  const score = (v) => {
+    let s = v.lang === locale ? 3 : 1;
+    if (HQ_HINTS.test(v.name)) s += 5;
+    if (LQ_HINTS.test(v.name)) s -= 5;
+    if (v.localService === false) s += 2; // giọng chạy qua mạng thường tự nhiên hơn giọng cài sẵn trên máy
+    return s;
+  };
+
+  return candidates.sort((a, b) => score(b) - score(a))[0];
+}
+
 export function useSpeech({ locale, onTranscript, onError }) {
   const [sttSupported, setSttSupported] = useState(true);
   const [listening, setListening] = useState(false);
@@ -16,8 +38,19 @@ export function useSpeech({ locale, onTranscript, onError }) {
   const [speaking, setSpeaking] = useState(false);
 
   const recognitionRef = useRef(null);
+  const voicesRef = useRef([]);
   const callbacksRef = useRef({ onTranscript, onError });
   callbacksRef.current = { onTranscript, onError };
+
+  // Danh sách giọng đọc thường nạp bất đồng bộ (rỗng cho tới khi 'voiceschanged' bắn ra)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const synth = window.speechSynthesis;
+    const loadVoices = () => { voicesRef.current = synth.getVoices(); };
+    loadVoices();
+    synth.addEventListener('voiceschanged', loadVoices);
+    return () => synth.removeEventListener('voiceschanged', loadVoices);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -92,11 +125,9 @@ export function useSpeech({ locale, onTranscript, onError }) {
     utter.lang = locale;
     utter.rate = 0.95;
 
-    // Ưu tiên voice khớp ngôn ngữ (một số thiết bị mặc định voice sai lang)
-    const voices = synth.getVoices();
-    const match =
-      voices.find((v) => v.lang === locale) ||
-      voices.find((v) => v.lang?.startsWith(locale.split('-')[0]));
+    // Ưu tiên giọng tự nhiên nhất khớp ngôn ngữ (một số thiết bị mặc định voice sai lang hoặc chọn giọng robot)
+    const voices = voicesRef.current.length ? voicesRef.current : synth.getVoices();
+    const match = pickBestVoice(voices, locale);
     if (match) utter.voice = match;
 
     utter.onstart = () => setSpeaking(true);
