@@ -4,23 +4,20 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-/**
- * Premium mobile bottom tab navigation bar with smooth glassmorphism,
- * glowing icons, and responsive active state classes.
- */
+/** Thanh điều hướng dưới cùng kiểu mobile app. */
 export default function StickyBottomNav() {
   const pathname = usePathname();
 
   const navItems = [
     {
-      label: 'Home',
+      label: 'Trang chủ',
       path: '/',
       icon: (active) => (
         <svg
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
-          strokeWidth={active ? "2.5" : "1.5"}
+          strokeWidth={active ? '2.5' : '1.5'}
           stroke="currentColor"
           className={`w-6 h-6 transition-all duration-300 ${active ? 'text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'text-slate-400'}`}
         >
@@ -29,14 +26,14 @@ export default function StickyBottomNav() {
       ),
     },
     {
-      label: 'Chat',
+      label: 'Hội thoại',
       path: '/chat',
       icon: (active) => (
         <svg
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
-          strokeWidth={active ? "2.5" : "1.5"}
+          strokeWidth={active ? '2.5' : '1.5'}
           stroke="currentColor"
           className={`w-6 h-6 transition-all duration-300 ${active ? 'text-violet-400 drop-shadow-[0_0_8px_rgba(167,139,250,0.6)]' : 'text-slate-400'}`}
         >
@@ -45,14 +42,14 @@ export default function StickyBottomNav() {
       ),
     },
     {
-      label: 'Notebook',
+      label: 'Sổ tay',
       path: '/notebook',
       icon: (active) => (
         <svg
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
-          strokeWidth={active ? "2.5" : "1.5"}
+          strokeWidth={active ? '2.5' : '1.5'}
           stroke="currentColor"
           className={`w-6 h-6 transition-all duration-300 ${active ? 'text-fuchsia-400 drop-shadow-[0_0_8px_rgba(232,121,249,0.6)]' : 'text-slate-400'}`}
         >
@@ -74,13 +71,12 @@ export default function StickyBottomNav() {
           >
             <div className="relative flex items-center justify-center p-1 rounded-xl transition-all duration-300 group-active:scale-95 group-hover:bg-slate-900/40">
               {item.icon(isActive)}
-              {/* Floating micro dot underneath active item */}
               {isActive && (
                 <span className="absolute -bottom-1 w-1 h-1 rounded-full bg-indigo-500 animate-pulse" />
               )}
             </div>
             <span
-              className={`text-[10px] font-semibold tracking-wider uppercase transition-colors duration-300 ${
+              className={`text-[10px] font-semibold tracking-wide transition-colors duration-300 ${
                 isActive ? 'text-slate-100 font-bold' : 'text-slate-500 group-hover:text-slate-400'
               }`}
             >

@@ -1,160 +1,226 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import StickyBottomNav from '../components/layout/StickyBottomNav';
-import { db } from '../lib/dexie/db';
-import { supabase } from '../lib/supabase/client';
+import { db, createSession } from '../lib/db';
+
+const LANGUAGES = [
+  { code: 'en', label: 'Tiếng Anh', flag: '🇬🇧' },
+  { code: 'ja', label: 'Tiếng Nhật', flag: '🇯🇵' },
+];
+
+const SUGGESTED_TOPICS = {
+  en: ['Giới thiệu bản thân', 'Công việc và dự án IT', 'Kế hoạch cuối tuần', 'Du lịch', 'Phim và âm nhạc', 'Phỏng vấn xin việc'],
+  ja: ['Tự giới thiệu (自己紹介)', 'Công việc hàng ngày', 'Đồ ăn Nhật', 'Sở thích', 'Chuyện thời tiết', 'Kế hoạch du lịch Nhật'],
+};
 
 export default function HomePage() {
-  const [vocabCount, setVocabCount] = useState(0);
-  const [grammarCount, setGrammarCount] = useState(0);
-  const [userEmail, setUserEmail] = useState(null);
+  const router = useRouter();
+  const [language, setLanguage] = useState('en');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [freeTopic, setFreeTopic] = useState('');
+  const [recentSessions, setRecentSessions] = useState([]);
+  const [stats, setStats] = useState({ vocab: 0, grammar: 0 });
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
-    // Load local stats
-    const loadStats = async () => {
-      try {
-        const vCount = await db.vocabulary.count();
-        const gCount = await db.grammar.count();
-        setVocabCount(vCount);
-        setGrammarCount(gCount);
-      } catch (err) {
-        console.error('Error counting Dexie records:', err);
-      }
-    };
-
-    // Load auth info
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUserEmail(session.user.email);
-      }
-    };
-
-    loadStats();
-    checkUser();
+    const saved = localStorage.getItem('tutor_language');
+    if (saved === 'en' || saved === 'ja') setLanguage(saved);
+    loadData();
   }, []);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setUserEmail(null);
+  const loadData = async () => {
+    try {
+      const [sessions, vocabCount, grammarCount] = await Promise.all([
+        db.sessions.orderBy('updatedAt').reverse().limit(4).toArray(),
+        db.vocab.count(),
+        db.grammar.count(),
+      ]);
+      setRecentSessions(sessions.filter((s) => s.messages?.length > 0));
+      setStats({ vocab: vocabCount, grammar: grammarCount });
+    } catch (err) {
+      console.error('Không đọc được dữ liệu local:', err);
+    }
+  };
+
+  const pickLanguage = (code) => {
+    setLanguage(code);
+    localStorage.setItem('tutor_language', code);
+  };
+
+  const startSession = async ({ topic, videoUrl }) => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      const id = await createSession({
+        language,
+        topic: topic || 'Trò chuyện tự do',
+        videoUrl: videoUrl || '',
+      });
+      router.push(`/chat?id=${id}`);
+    } catch (err) {
+      console.error('Không tạo được phiên hội thoại:', err);
+      setStarting(false);
+    }
+  };
+
+  const handleStartYoutube = () => {
+    const url = youtubeUrl.trim();
+    if (!url) return;
+    startSession({ topic: 'Chủ đề từ video YouTube', videoUrl: url });
+  };
+
+  const handleStartFreeTopic = (topic) => {
+    const t = (topic || freeTopic).trim();
+    if (!t) return;
+    startSession({ topic: t });
   };
 
   return (
     <div className="flex flex-col h-full relative">
-      {/* Background glowing ambient elements */}
-      <div className="absolute top-10 left-10 w-44 h-44 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
-      <div className="absolute bottom-20 right-10 w-44 h-44 rounded-full bg-violet-500/10 blur-3xl pointer-events-none" />
-
-      {/* Profile/Welcome Header */}
-      <header className="px-6 pt-8 pb-4 flex items-center justify-between z-30">
-        <div>
-          <span className="text-[10px] uppercase tracking-wider font-extrabold text-indigo-400">Welcome back</span>
-          <h1 className="text-2xl font-black text-white font-outfit leading-tight mt-0.5">
-            {userEmail ? userEmail.split('@')[0] : 'Language Learner'}
+      <div className="flex-1 overflow-y-auto no-scrollbar px-6 pt-8 pb-28 space-y-6">
+        {/* Header */}
+        <header className="space-y-1">
+          <h1 className="text-2xl font-black text-white font-outfit tracking-tight">
+            Hôm nay nói gì? 🎙️
           </h1>
+          <p className="text-xs text-slate-500 font-medium">
+            Chọn chủ đề rồi mở miệng nói thôi — AI sẽ trò chuyện, sửa lỗi và ghi chú giúp bạn.
+          </p>
+        </header>
+
+        {/* Language selector */}
+        <div className="flex bg-slate-950 border border-slate-900 rounded-xl p-1">
+          {LANGUAGES.map((l) => (
+            <button
+              key={l.code}
+              onClick={() => pickLanguage(l.code)}
+              className={`flex-1 py-2.5 text-xs font-bold font-outfit rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 ${
+                language === l.code
+                  ? 'bg-indigo-600/15 border border-indigo-500/30 text-white'
+                  : 'text-slate-500 hover:text-slate-400 border border-transparent'
+              }`}
+            >
+              <span className="text-sm">{l.flag}</span> {l.label}
+            </button>
+          ))}
         </div>
 
-        {userEmail ? (
+        {/* YouTube topic card */}
+        <section className="glassmorphism-card rounded-2xl p-5 space-y-3 border border-slate-900">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4">
+                <path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 00.5 6.2 31 31 0 000 12a31 31 0 00.5 5.8 3 3 0 002.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 002.1-2.1A31 31 0 0024 12a31 31 0 00-.5-5.8zM9.6 15.6V8.4L15.8 12l-6.2 3.6z" />
+              </svg>
+            </span>
+            <div>
+              <h2 className="text-sm font-black text-white font-outfit">Nói theo video YouTube</h2>
+              <p className="text-[10px] text-slate-500">AI xem video và dẫn dắt bạn thảo luận về nội dung đó</p>
+            </div>
+          </div>
+          <input
+            type="url"
+            inputMode="url"
+            placeholder="Dán link video YouTube bất kỳ..."
+            value={youtubeUrl}
+            onChange={(e) => setYoutubeUrl(e.target.value)}
+            className="w-full bg-slate-950/80 border border-slate-900 rounded-xl px-4 py-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50"
+          />
           <button
-            onClick={handleSignOut}
-            className="text-[10px] bg-slate-900/60 border border-slate-800 hover:bg-slate-900 hover:border-slate-700 px-3 py-1.5 rounded-xl text-slate-400 font-bold transition-all active:scale-95 cursor-pointer"
+            onClick={handleStartYoutube}
+            disabled={!youtubeUrl.trim() || starting}
+            className="w-full bg-gradient-to-r from-rose-500 to-orange-500 text-white font-black text-xs py-3 rounded-xl shadow-lg active:scale-[0.98] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Sign Out
+            {starting ? 'Đang tạo...' : 'Tạo chủ đề từ video'}
           </button>
-        ) : (
-          <Link
-            href="/login"
-            className="text-[10px] bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 rounded-xl text-white font-bold transition-all shadow shadow-indigo-500/10 active:scale-95 cursor-pointer"
-          >
-            Sign In
-          </Link>
+        </section>
+
+        {/* Free topic card */}
+        <section className="glassmorphism-card rounded-2xl p-5 space-y-3 border border-slate-900">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+              </svg>
+            </span>
+            <div>
+              <h2 className="text-sm font-black text-white font-outfit">Chủ đề tự chọn</h2>
+              <p className="text-[10px] text-slate-500">Gõ chủ đề bất kỳ hoặc chọn gợi ý bên dưới</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Ví dụ: kể về ngày hôm nay của bạn..."
+              value={freeTopic}
+              onChange={(e) => setFreeTopic(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleStartFreeTopic()}
+              className="flex-1 bg-slate-950/80 border border-slate-900 rounded-xl px-4 py-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50"
+            />
+            <button
+              onClick={() => handleStartFreeTopic()}
+              disabled={!freeTopic.trim() || starting}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-4 rounded-xl active:scale-95 transition-all cursor-pointer disabled:opacity-40"
+            >
+              Nói
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTED_TOPICS[language].map((t) => (
+              <button
+                key={t}
+                onClick={() => handleStartFreeTopic(t)}
+                disabled={starting}
+                className="text-[10px] font-bold text-slate-400 bg-slate-950/60 border border-slate-900 rounded-full px-3 py-1.5 hover:border-indigo-500/40 hover:text-indigo-300 active:scale-95 transition-all cursor-pointer"
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Stats */}
+        <section className="grid grid-cols-2 gap-3">
+          <div className="glassmorphism-card rounded-2xl p-4 border border-slate-900">
+            <p className="text-2xl font-black text-indigo-400 font-outfit">{stats.vocab}</p>
+            <p className="text-[10px] text-slate-500 font-bold mt-0.5">Từ vựng đã lưu</p>
+          </div>
+          <div className="glassmorphism-card rounded-2xl p-4 border border-slate-900">
+            <p className="text-2xl font-black text-violet-400 font-outfit">{stats.grammar}</p>
+            <p className="text-[10px] text-slate-500 font-bold mt-0.5">Ngữ pháp đã lưu</p>
+          </div>
+        </section>
+
+        {/* Recent sessions */}
+        {recentSessions.length > 0 && (
+          <section className="space-y-2.5">
+            <h2 className="text-xs font-black text-slate-400 font-outfit uppercase tracking-wider">
+              Tiếp tục hội thoại
+            </h2>
+            {recentSessions.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => router.push(`/chat?id=${s.id}`)}
+                className="w-full text-left glassmorphism-card rounded-xl px-4 py-3 border border-slate-900 hover:border-indigo-500/30 active:scale-[0.99] transition-all cursor-pointer flex items-center gap-3"
+              >
+                <span className="text-lg">{s.language === 'ja' ? '🇯🇵' : '🇬🇧'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-200 truncate">{s.videoTitle || s.topic}</p>
+                  <p className="text-[10px] text-slate-600">
+                    {s.messages.length} tin nhắn · {new Date(s.updatedAt).toLocaleDateString('vi-VN')}
+                  </p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4 text-slate-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            ))}
+          </section>
         )}
-      </header>
-
-      {/* Main Home Dashboard Frame */}
-      <div className="flex-1 px-6 pt-2 pb-24 overflow-y-auto no-scrollbar space-y-6 z-20">
-        {/* Core dynamic stat cards */}
-        <section className="grid grid-cols-2 gap-4">
-          <div className="glassmorphism-card rounded-2xl p-4 border border-slate-900 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-indigo-500/20 transition-all duration-300">
-            <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-500">Local Vocab</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-3xl font-black font-outfit text-indigo-400 drop-shadow-[0_0_6px_rgba(99,102,241,0.3)]">
-                {vocabCount}
-              </span>
-              <span className="text-[10px] text-slate-400 font-bold">words</span>
-            </div>
-            <span className="text-[10px] text-slate-500 mt-2 font-medium">Offline IndexedDB</span>
-          </div>
-
-          <div className="glassmorphism-card rounded-2xl p-4 border border-slate-900 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-violet-500/20 transition-all duration-300">
-            <span className="text-[9px] uppercase tracking-wider font-extrabold text-slate-500">Grammar Rules</span>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-3xl font-black font-outfit text-violet-400 drop-shadow-[0_0_6px_rgba(167,139,250,0.3)]">
-                {grammarCount}
-              </span>
-              <span className="text-[10px] text-slate-400 font-bold">notes</span>
-            </div>
-            <span className="text-[10px] text-slate-500 mt-2 font-medium">Auto-synced</span>
-          </div>
-        </section>
-
-        {/* Feature quick access boards */}
-        <section className="space-y-4">
-          <h2 className="text-xs uppercase tracking-wider font-extrabold text-slate-500 ml-1">Learning Modules</h2>
-
-          <Link href="/chat" className="block group">
-            <div className="glassmorphism-card rounded-2xl p-5 border border-slate-900 hover:border-indigo-500/30 transition-all duration-300 flex items-center justify-between group-active:scale-[0.99] cursor-pointer">
-              <div className="flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5.5 h-5.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-100 font-outfit">AI Conversation Partner</h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Real-time voice chats and instant feedback</p>
-                </div>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 transition-colors">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </div>
-          </Link>
-
-          <Link href="/notebook" className="block group">
-            <div className="glassmorphism-card rounded-2xl p-5 border border-slate-900 hover:border-violet-500/30 transition-all duration-300 flex items-center justify-between group-active:scale-[0.99] cursor-pointer">
-              <div className="flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 group-hover:scale-105 transition-transform duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-5.5 h-5.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-100 font-outfit">Personal Notebook</h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Manage vocabulary lists and grammar notes</p>
-                </div>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-4 h-4 text-slate-600 group-hover:text-violet-400 transition-colors">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </div>
-          </Link>
-        </section>
-
-        {/* Sync explanation block */}
-        <section className="bg-slate-900/30 rounded-2xl p-4 border border-slate-900/60 text-center">
-          <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
-            Offline-First synchronization
-          </h4>
-          <p className="text-[10px] text-slate-500 leading-relaxed max-w-xs mx-auto">
-            All vocabulary and grammar cards are stored locally in the browser immediately. When internet is detected, they are automatically synchronized to Supabase Cloud securely.
-          </p>
-        </section>
       </div>
 
-      {/* Interactive Bottom Navigation tab */}
       <StickyBottomNav />
     </div>
   );
