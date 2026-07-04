@@ -60,6 +60,16 @@ const RESPONSE_SCHEMA = {
   required: ['reply', 'replyTranslation', 'grammarNotes', 'vocabNotes', 'suggestedReply'],
 };
 
+/** practiceTargets.grammar có thể là string đơn giản (từ Sổ tay) hoặc object {name, pattern, explanationVi, example} (từ Lộ trình). */
+function formatGrammarTarget(item) {
+  if (typeof item === 'string') return item;
+  const parts = [item.name];
+  if (item.pattern) parts.push(`(${item.pattern})`);
+  if (item.explanationVi) parts.push(`— ${item.explanationVi}`);
+  if (item.example) parts.push(`Ví dụ: "${item.example}"`);
+  return parts.join(' ');
+}
+
 function buildSystemPrompt({ language, topic, videoContext, practiceTargets, known }) {
   const lang = LANGUAGE_NAMES[language];
   const lines = [
@@ -87,9 +97,15 @@ function buildSystemPrompt({ language, topic, videoContext, practiceTargets, kno
   }
 
   if (practiceTargets?.vocab?.length || practiceTargets?.grammar?.length) {
-    lines.push('', 'MỤC TIÊU LUYỆN TẬP — khéo léo dẫn dắt để học viên DÙNG được các mục sau, khen khi họ dùng đúng:');
-    if (practiceTargets.vocab?.length) lines.push(`- Từ vựng: ${practiceTargets.vocab.join(', ')}`);
-    if (practiceTargets.grammar?.length) lines.push(`- Ngữ pháp: ${practiceTargets.grammar.join(', ')}`);
+    lines.push(
+      '',
+      'MỤC TIÊU LUYỆN TẬP — đây là trọng tâm của buổi học này. Dẫn dắt hội thoại xoay quanh việc để học viên nghe và tự dùng được các mục sau NHIỀU LẦN trong suốt cuộc trò chuyện, khen ngợi khi dùng đúng, nhẹ nhàng gợi lại nếu học viên quên dùng:'
+    );
+    if (practiceTargets.vocab?.length) lines.push(`- Từ vựng: ${practiceTargets.vocab.map(formatGrammarTarget).join(', ')}`);
+    if (practiceTargets.grammar?.length) {
+      lines.push(`- Ngữ pháp: ${practiceTargets.grammar.map(formatGrammarTarget).join(' | ')}`);
+      lines.push('Hãy tự mình dùng đúng cấu trúc ngữ pháp này trong "reply" ít nhất một lần ngay từ lượt đầu để làm mẫu, sau đó tạo tình huống để học viên phải dùng lại nó.');
+    }
   }
 
   if (known?.vocab?.length || known?.grammar?.length) {

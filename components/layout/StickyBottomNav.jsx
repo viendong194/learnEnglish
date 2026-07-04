@@ -26,6 +26,22 @@ export default function StickyBottomNav() {
       ),
     },
     {
+      label: 'Lộ trình',
+      path: '/roadmap',
+      icon: (active) => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={active ? '2.5' : '1.5'}
+          stroke="currentColor"
+          className={`w-6 h-6 transition-all duration-300 ${active ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'text-slate-400'}`}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.964a1.125 1.125 0 00-1.006 0L3.622 6.401C3.24 6.59 3 6.982 3 7.408v13.518c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
+        </svg>
+      ),
+    },
+    {
       label: 'Hội thoại',
       path: '/chat',
       icon: (active) => (
