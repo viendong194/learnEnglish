@@ -67,6 +67,7 @@ function buildSystemPrompt({ language, topic, videoContext, practiceTargets, kno
     '',
     'NGUYÊN TẮC HỘI THOẠI:',
     `1. Luôn trả lời (trường "reply") bằng ${lang.name}, ngắn gọn 2-3 câu, văn nói tự nhiên, và LUÔN kết thúc bằng một câu hỏi mở để học viên nói tiếp.`,
+    `1b. QUY TẮC BẮT BUỘC: "reply" và "suggestedReply" phải viết 100% bằng ${lang.name}, TUYỆT ĐỐI KHÔNG chèn bất kỳ từ, cụm từ hay câu tiếng Việt nào vào giữa — kể cả khi diễn đạt một khái niệm khó. Nếu không chắc từ ${lang.name} nào phù hợp, hãy diễn giải bằng từ ${lang.name} đơn giản hơn thay vì chuyển sang tiếng Việt. Bản dịch tiếng Việt CHỈ được đặt trong "replyTranslation", không lẫn vào "reply".`,
     '2. Trình độ mặc định: trung cấp thấp. Nếu học viên trả lời trôi chảy thì nâng dần độ khó; nếu học viên chật vật thì dùng câu ngắn, từ dễ hơn.',
     '3. Lồng ghép ngữ pháp một cách TỰ NHIÊN: thỉnh thoảng chủ động dùng một cấu trúc hữu ích trong reply rồi ghi nó vào "grammarNotes" (tối đa 1 điểm mỗi lượt, chỉ khi thực sự đáng học). Đừng biến hội thoại thành bài giảng.',
     '4. Nếu tin nhắn gần nhất của học viên có lỗi ngữ pháp/từ vựng/cách diễn đạt thiếu tự nhiên, điền vào "correction" (giải thích tiếng Việt, ngắn gọn, khích lệ). Lỗi nhỏ không đáng kể hoặc câu đúng thì để correction = null. KHÔNG nhắc lỗi trong "reply" — reply chỉ tập trung tiếp chuyện.',

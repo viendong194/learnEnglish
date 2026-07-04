@@ -63,6 +63,8 @@ export async function POST(request) {
       '- keyPoints: 3-5 khía cạnh đáng thảo luận (tiếng Việt).',
       `- vocabPreview: 5-8 từ vựng ${lang.name} hữu ích liên quan chủ đề video (kể cả khi video không nói bằng ${lang.name}).`,
       `- openingQuestion: lời chào và câu hỏi mở đầu bằng ${lang.name}, thân thiện, dễ trả lời.`,
+      '',
+      `QUY TẮC BẮT BUỘC: "openingQuestion" phải viết 100% bằng ${lang.name}, TUYỆT ĐỐI KHÔNG chèn từ hay cụm từ tiếng Việt vào giữa câu. Nếu khó diễn đạt, dùng từ ${lang.name} đơn giản hơn thay vì chuyển ngôn ngữ giữa chừng.`,
     ].join('\n');
 
     const result = await callGemini({

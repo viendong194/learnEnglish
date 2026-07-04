@@ -9,10 +9,23 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * @param {(text: string) => void} opts.onTranscript
  * @param {(err: any) => void} [opts.onError]
  */
-// Từ khoá nhận diện giọng chất lượng cao (giọng mạng/neural) thường có trên Android Chrome & Edge
+// Từ khoá nhận diện giọng chất lượng cao (giọng mạng/neural), phổ biến trên Android Chrome & Windows Edge
 const HQ_HINTS = /google|neural|wavenet|natural|enhanced|premium|online/i;
 // Giọng "Compact" trên iOS/macOS là giọng nén chất lượng thấp, robot hơn hẳn giọng mặc định
 const LQ_HINTS = /compact/i;
+// macOS/iOS cài sẵn một loạt giọng "vui" (hiệu ứng âm thanh, hài hước) lẫn vào danh sách giọng đọc —
+// nghe rất máy móc/kỳ quặc nếu vô tình bị chọn, nên loại hẳn khỏi lựa chọn tự động
+const NOVELTY_BLOCKLIST = new Set([
+  'Albert', 'Bad News', 'Bahh', 'Bells', 'Boing', 'Bubbles', 'Cellos', 'Good News',
+  'Jester', 'Junior', 'Organ', 'Ralph', 'Superstar', 'Trinoids', 'Whisper', 'Wobble', 'Zarvox',
+]);
+// Giọng mặc định quen thuộc, chất lượng ổn định trên iOS/macOS — ưu tiên nhẹ khi không có giọng "network" tốt hơn
+const PREFERRED_NAMES = new Set(['Samantha', 'Kyoko']);
+
+/** Bỏ hậu tố ngôn ngữ trong ngoặc, ví dụ "Eddy (Tiếng Nhật (Nhật Bản))" -> "Eddy" */
+function baseVoiceName(name) {
+  return name.replace(/\s*\(.*\)\s*$/, '').trim();
+}
 
 /** Chấm điểm và chọn giọng đọc tự nhiên nhất khớp locale trong số các giọng máy đã cài. */
 function pickBestVoice(voices, locale) {
@@ -21,9 +34,12 @@ function pickBestVoice(voices, locale) {
   if (!candidates.length) return null;
 
   const score = (v) => {
+    const base = baseVoiceName(v.name);
     let s = v.lang === locale ? 3 : 1;
     if (HQ_HINTS.test(v.name)) s += 5;
     if (LQ_HINTS.test(v.name)) s -= 5;
+    if (NOVELTY_BLOCKLIST.has(base)) s -= 8;
+    if (PREFERRED_NAMES.has(base)) s += 2;
     if (v.localService === false) s += 2; // giọng chạy qua mạng thường tự nhiên hơn giọng cài sẵn trên máy
     return s;
   };
