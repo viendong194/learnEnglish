@@ -49,6 +49,17 @@ export default function HomePage() {
     localStorage.setItem('tutor_language', code);
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Đăng xuất thất bại:', err);
+    } finally {
+      router.replace('/login');
+      router.refresh();
+    }
+  };
+
   const startSession = async ({ topic, videoUrl }) => {
     if (starting) return;
     setStarting(true);
@@ -81,13 +92,24 @@ export default function HomePage() {
     <div className="flex flex-col h-full relative">
       <div className="flex-1 overflow-y-auto no-scrollbar px-6 pt-8 pb-28 space-y-6">
         {/* Header */}
-        <header className="space-y-1">
-          <h1 className="text-2xl font-black text-white font-outfit tracking-tight">
-            Hôm nay nói gì? 🎙️
-          </h1>
-          <p className="text-xs text-slate-500 font-medium">
-            Chọn chủ đề rồi mở miệng nói thôi — AI sẽ trò chuyện, sửa lỗi và ghi chú giúp bạn.
-          </p>
+        <header className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-black text-white font-outfit tracking-tight">
+              Hôm nay nói gì? 🎙️
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              Chọn chủ đề rồi mở miệng nói thôi — AI sẽ trò chuyện, sửa lỗi và ghi chú giúp bạn.
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            title="Đăng xuất"
+            className="shrink-0 p-2 rounded-xl border border-slate-900 bg-slate-950/60 text-slate-500 hover:text-rose-400 hover:border-rose-500/30 transition-all active:scale-95 cursor-pointer"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0110.5 3h6a2.25 2.25 0 012.25 2.25v13.5A2.25 2.25 0 0116.5 21h-6a2.25 2.25 0 01-2.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+            </svg>
+          </button>
         </header>
 
         {/* Language selector */}
