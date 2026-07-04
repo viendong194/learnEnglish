@@ -55,6 +55,8 @@ export function useSpeech({ locale, onTranscript, onError }) {
 
   const recognitionRef = useRef(null);
   const voicesRef = useRef([]);
+  const finalTextRef = useRef('');
+  const interimTextRef = useRef('');
   const callbacksRef = useRef({ onTranscript, onError });
   callbacksRef.current = { onTranscript, onError };
 
@@ -78,14 +80,19 @@ export function useSpeech({ locale, onTranscript, onError }) {
 
     const rec = new SpeechRecognition();
     rec.lang = locale;
-    rec.continuous = false;
+    // continuous=true: không tự động dừng khi người dùng ngừng nói giữa chừng (im lặng để suy nghĩ).
+    // Người dùng tự bấm nút mic lần nữa để báo hiệu đã nói xong — đáng tin cậy hơn suy đoán của trình duyệt.
+    rec.continuous = true;
     rec.interimResults = true;
 
     rec.onstart = () => {
+      finalTextRef.current = '';
+      interimTextRef.current = '';
       setListening(true);
       setInterimText('');
     };
     rec.onresult = (event) => {
+      // Ở chế độ continuous, event.results chứa toàn bộ lịch sử của phiên nghe (các đoạn đã "final" cộng đoạn đang nói dở)
       let finalText = '';
       let interim = '';
       for (let i = 0; i < event.results.length; i++) {
@@ -93,15 +100,11 @@ export function useSpeech({ locale, onTranscript, onError }) {
         if (r.isFinal) finalText += r[0].transcript;
         else interim += r[0].transcript;
       }
+      finalTextRef.current = finalText;
+      interimTextRef.current = interim;
       setInterimText(interim);
-      if (finalText.trim()) {
-        setInterimText('');
-        callbacksRef.current.onTranscript?.(finalText.trim());
-      }
     };
     rec.onerror = (event) => {
-      setListening(false);
-      setInterimText('');
       // 'no-speech' và 'aborted' là tình huống bình thường, không cần báo lỗi
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
         callbacksRef.current.onError?.(event);
@@ -110,6 +113,13 @@ export function useSpeech({ locale, onTranscript, onError }) {
     rec.onend = () => {
       setListening(false);
       setInterimText('');
+      // Gửi toàn bộ transcript đã gom được khi phiên nghe thực sự kết thúc (do người dùng bấm dừng)
+      const finalText = (finalTextRef.current + ' ' + interimTextRef.current).trim();
+      finalTextRef.current = '';
+      interimTextRef.current = '';
+      if (finalText) {
+        callbacksRef.current.onTranscript?.(finalText);
+      }
     };
 
     recognitionRef.current = rec;

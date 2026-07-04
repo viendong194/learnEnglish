@@ -284,7 +284,7 @@ function ChatContent() {
             {session.videoTitle || session.topic}
           </h1>
           <p className="text-[10px] text-slate-500 font-medium">
-            {sending ? 'AI đang soạn câu trả lời...' : speech.listening ? 'Đang nghe bạn nói...' : 'Nói hoặc gõ để trả lời'}
+            {sending ? 'AI đang soạn câu trả lời...' : speech.listening ? 'Đang nghe... bấm mic để dừng' : 'Nói hoặc gõ để trả lời'}
           </p>
         </div>
         <button
