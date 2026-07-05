@@ -4,7 +4,7 @@ export const maxDuration = 60;
 
 // Chỉ Gemini (qua provider Google AI Studio) đọc được YouTube URL trực tiếp,
 // nên route này luôn dùng model Gemini bất kể OPENROUTER_MODEL cấu hình gì.
-const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'google/gemini-2.5-flash';
+const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'google/gemma-4-31b-it:free';
 
 const TOPIC_SCHEMA = {
   type: 'object',
