@@ -1,63 +1,66 @@
-import { callGemini, GeminiError, LANGUAGE_NAMES } from '../../../lib/gemini';
+import { callLLM, LLMError, LANGUAGE_NAMES } from '../../../lib/llm';
 
 export const maxDuration = 60;
 
 const RESPONSE_SCHEMA = {
-  type: 'OBJECT',
+  type: 'object',
+  additionalProperties: false,
   properties: {
     reply: {
-      type: 'STRING',
+      type: 'string',
       description: 'Câu trả lời hội thoại bằng ngôn ngữ đang học (2-3 câu, kết thúc bằng câu hỏi).',
     },
     replyTranslation: {
-      type: 'STRING',
+      type: 'string',
       description: 'Bản dịch tiếng Việt của reply.',
     },
     correction: {
-      type: 'OBJECT',
-      nullable: true,
+      type: ['object', 'null'],
       description: 'Sửa lỗi cho tin nhắn gần nhất của học viên. null nếu câu đã tự nhiên và đúng.',
+      additionalProperties: false,
       properties: {
-        original: { type: 'STRING' },
-        corrected: { type: 'STRING' },
-        explanationVi: { type: 'STRING', description: 'Giải thích ngắn gọn bằng tiếng Việt vì sao sửa như vậy.' },
+        original: { type: 'string' },
+        corrected: { type: 'string' },
+        explanationVi: { type: 'string', description: 'Giải thích ngắn gọn bằng tiếng Việt vì sao sửa như vậy.' },
       },
       required: ['original', 'corrected', 'explanationVi'],
     },
     grammarNotes: {
-      type: 'ARRAY',
+      type: 'array',
       description: 'Tối đa 1 điểm ngữ pháp mới vừa được dùng trong hội thoại, đáng lưu vào sổ tay. Mảng rỗng nếu không có gì mới.',
       items: {
-        type: 'OBJECT',
+        type: 'object',
+        additionalProperties: false,
         properties: {
-          name: { type: 'STRING', description: 'Tên điểm ngữ pháp, ví dụ "Thì hiện tại hoàn thành" hoặc "〜たことがある".' },
-          pattern: { type: 'STRING', description: 'Công thức/cấu trúc.' },
-          explanationVi: { type: 'STRING', description: 'Giải thích bằng tiếng Việt.' },
-          example: { type: 'STRING', description: 'Một câu ví dụ bằng ngôn ngữ đang học.' },
+          name: { type: 'string', description: 'Tên điểm ngữ pháp, ví dụ "Thì hiện tại hoàn thành" hoặc "〜たことがある".' },
+          pattern: { type: 'string', description: 'Công thức/cấu trúc.' },
+          explanationVi: { type: 'string', description: 'Giải thích bằng tiếng Việt.' },
+          example: { type: 'string', description: 'Một câu ví dụ bằng ngôn ngữ đang học.' },
         },
         required: ['name', 'pattern', 'explanationVi', 'example'],
       },
     },
     vocabNotes: {
-      type: 'ARRAY',
+      type: 'array',
       description: 'Tối đa 3 từ/cụm từ hữu ích xuất hiện trong reply mà học viên có thể chưa biết. Mảng rỗng nếu không có.',
       items: {
-        type: 'OBJECT',
+        type: 'object',
+        additionalProperties: false,
         properties: {
-          word: { type: 'STRING' },
-          reading: { type: 'STRING', description: 'Với tiếng Nhật: cách đọc hiragana. Với tiếng Anh: phiên âm IPA hoặc để trống.' },
-          meaningVi: { type: 'STRING' },
-          example: { type: 'STRING' },
+          word: { type: 'string' },
+          reading: { type: 'string', description: 'Với tiếng Nhật: cách đọc hiragana. Với tiếng Anh: phiên âm IPA. Để chuỗi rỗng nếu không có.' },
+          meaningVi: { type: 'string' },
+          example: { type: 'string', description: 'Câu ví dụ, để chuỗi rỗng nếu không có.' },
         },
-        required: ['word', 'meaningVi'],
+        required: ['word', 'reading', 'meaningVi', 'example'],
       },
     },
     suggestedReply: {
-      type: 'STRING',
+      type: 'string',
       description: 'Một câu trả lời mẫu tự nhiên mà học viên có thể nói tiếp, bằng ngôn ngữ đang học.',
     },
   },
-  required: ['reply', 'replyTranslation', 'grammarNotes', 'vocabNotes', 'suggestedReply'],
+  required: ['reply', 'replyTranslation', 'correction', 'grammarNotes', 'vocabNotes', 'suggestedReply'],
 };
 
 /** practiceTargets.grammar có thể là string đơn giản (từ Sổ tay) hoặc object {name, pattern, explanationVi, example} (từ Lộ trình). */
@@ -74,6 +77,7 @@ function buildSystemPrompt({ language, topic, videoContext, practiceTargets, kno
   const lang = LANGUAGE_NAMES[language];
   const lines = [
     `Bạn là bạn đồng hành luyện nói ${lang.vi} (${lang.name}) cho một học viên người Việt, trò chuyện qua giọng nói trên điện thoại.`,
+    'Luôn trả lời bằng một JSON object đúng theo schema đã cấu hình.',
     '',
     'NGUYÊN TẮC HỘI THOẠI:',
     `1. Luôn trả lời (trường "reply") bằng ${lang.name}, ngắn gọn 2-3 câu, văn nói tự nhiên, và LUÔN kết thúc bằng một câu hỏi mở để học viên nói tiếp.`,
@@ -126,29 +130,30 @@ export async function POST(request) {
       return Response.json({ error: 'Ngôn ngữ không hợp lệ.' }, { status: 400 });
     }
 
-    const systemInstruction = buildSystemPrompt({ language, topic, videoContext, practiceTargets, known });
+    const system = buildSystemPrompt({ language, topic, videoContext, practiceTargets, known });
 
     // Lấy tối đa 20 lượt gần nhất để giữ context gọn
     const turns = (history || []).slice(-20).map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.text }],
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.text,
     }));
 
-    // Gemini yêu cầu contents không rỗng — lượt mở đầu dùng chỉ dẫn kích hoạt
-    const contents = turns.length
+    // Lượt mở đầu (chưa có lịch sử) dùng chỉ dẫn kích hoạt
+    const messages = turns.length
       ? turns
-      : [{ role: 'user', parts: [{ text: '(Hãy bắt đầu cuộc hội thoại theo đúng nguyên tắc.)' }] }];
+      : [{ role: 'user', content: '(Hãy bắt đầu cuộc hội thoại theo đúng nguyên tắc.)' }];
 
-    const result = await callGemini({
-      systemInstruction,
-      contents,
-      responseSchema: RESPONSE_SCHEMA,
+    const result = await callLLM({
+      system,
+      messages,
+      schemaName: 'tutor_reply',
+      schema: RESPONSE_SCHEMA,
     });
 
     return Response.json(result);
   } catch (err) {
     console.error('[api/chat]', err);
-    const status = err instanceof GeminiError ? err.status : 500;
+    const status = err instanceof LLMError ? err.status : 500;
     return Response.json({ error: err.message || 'Lỗi máy chủ.' }, { status });
   }
 }

@@ -1,33 +1,39 @@
-import { callGemini, GeminiError, LANGUAGE_NAMES } from '../../../lib/gemini';
+import { callLLM, LLMError, LANGUAGE_NAMES } from '../../../lib/llm';
 
 export const maxDuration = 60;
 
+// Chỉ Gemini (qua provider Google AI Studio) đọc được YouTube URL trực tiếp,
+// nên route này luôn dùng model Gemini bất kể OPENROUTER_MODEL cấu hình gì.
+const VIDEO_MODEL = process.env.OPENROUTER_VIDEO_MODEL || 'google/gemini-2.5-flash';
+
 const TOPIC_SCHEMA = {
-  type: 'OBJECT',
+  type: 'object',
+  additionalProperties: false,
   properties: {
-    title: { type: 'STRING', description: 'Tiêu đề video (giữ nguyên ngôn ngữ gốc).' },
-    summaryVi: { type: 'STRING', description: 'Tóm tắt nội dung video bằng tiếng Việt, 2-3 câu.' },
+    title: { type: 'string', description: 'Tiêu đề video (giữ nguyên ngôn ngữ gốc).' },
+    summaryVi: { type: 'string', description: 'Tóm tắt nội dung video bằng tiếng Việt, 2-3 câu.' },
     keyPoints: {
-      type: 'ARRAY',
+      type: 'array',
       description: '3-5 ý chính/khía cạnh của video có thể đem ra thảo luận, bằng tiếng Việt.',
-      items: { type: 'STRING' },
+      items: { type: 'string' },
     },
     vocabPreview: {
-      type: 'ARRAY',
+      type: 'array',
       description: '5-8 từ vựng đáng học liên quan đến chủ đề video, bằng ngôn ngữ học viên đang luyện.',
       items: {
-        type: 'OBJECT',
+        type: 'object',
+        additionalProperties: false,
         properties: {
-          word: { type: 'STRING' },
-          reading: { type: 'STRING', description: 'Hiragana nếu tiếng Nhật, IPA hoặc trống nếu tiếng Anh.' },
-          meaningVi: { type: 'STRING' },
-          example: { type: 'STRING' },
+          word: { type: 'string' },
+          reading: { type: 'string', description: 'Hiragana nếu tiếng Nhật, IPA nếu tiếng Anh. Để chuỗi rỗng nếu không có.' },
+          meaningVi: { type: 'string' },
+          example: { type: 'string', description: 'Câu ví dụ, để chuỗi rỗng nếu không có.' },
         },
-        required: ['word', 'meaningVi'],
+        required: ['word', 'reading', 'meaningVi', 'example'],
       },
     },
     openingQuestion: {
-      type: 'STRING',
+      type: 'string',
       description: 'Lời chào + câu hỏi mở đầu hội thoại về video, bằng ngôn ngữ đang luyện, 2-3 câu thân thiện.',
     },
   },
@@ -57,7 +63,7 @@ export async function POST(request) {
     const lang = LANGUAGE_NAMES[language];
     const prompt = [
       `Học viên người Việt muốn luyện nói ${lang.vi} (${lang.name}) dựa trên nội dung video YouTube này.`,
-      'Hãy xem/đọc nội dung video và trả về đúng theo schema:',
+      'Hãy xem/đọc nội dung video và trả về JSON đúng theo schema:',
       '- title: tiêu đề video.',
       '- summaryVi: tóm tắt tiếng Việt 2-3 câu.',
       '- keyPoints: 3-5 khía cạnh đáng thảo luận (tiếng Việt).',
@@ -67,20 +73,27 @@ export async function POST(request) {
       `QUY TẮC BẮT BUỘC: "openingQuestion" phải viết 100% bằng ${lang.name}, TUYỆT ĐỐI KHÔNG chèn từ hay cụm từ tiếng Việt vào giữa câu. Nếu khó diễn đạt, dùng từ ${lang.name} đơn giản hơn thay vì chuyển ngôn ngữ giữa chừng.`,
     ].join('\n');
 
-    const result = await callGemini({
-      contents: [
+    const result = await callLLM({
+      messages: [
         {
           role: 'user',
-          parts: [{ fileData: { fileUri: youtubeUrl } }, { text: prompt }],
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'video_url', video_url: { url: youtubeUrl } },
+          ],
         },
       ],
-      responseSchema: TOPIC_SCHEMA,
+      schemaName: 'video_topic',
+      schema: TOPIC_SCHEMA,
+      model: VIDEO_MODEL,
+      // Google AI Studio là provider duy nhất nhận YouTube URL trực tiếp (Vertex yêu cầu base64)
+      provider: { only: ['google-ai-studio'] },
     });
 
     return Response.json(result);
   } catch (err) {
     console.error('[api/topic]', err);
-    const status = err instanceof GeminiError ? err.status : 500;
+    const status = err instanceof LLMError ? err.status : 500;
     return Response.json({ error: err.message || 'Lỗi máy chủ.' }, { status });
   }
 }
