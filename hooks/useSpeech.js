@@ -55,8 +55,13 @@ export function useSpeech({ locale, onTranscript, onError }) {
 
   const recognitionRef = useRef(null);
   const voicesRef = useRef([]);
-  const finalTextRef = useRef('');
-  const interimTextRef = useRef('');
+  // Transcript đã chốt qua các "chu kỳ" ghi âm trước đó (xem giải thích continuous bên dưới)
+  const sessionTextRef = useRef('');
+  // Final/interim của CHU KỲ hiện tại — event.results được trình duyệt reset về rỗng mỗi lần rec.start()
+  const cycleFinalRef = useRef('');
+  const cycleInterimRef = useRef('');
+  // true = người dùng đã chủ động bấm dừng; false = mic tự dừng do trình duyệt đoán im lặng, cần âm thầm khởi động lại
+  const manualStopRef = useRef(true);
   const callbacksRef = useRef({ onTranscript, onError });
   callbacksRef.current = { onTranscript, onError };
 
@@ -80,19 +85,21 @@ export function useSpeech({ locale, onTranscript, onError }) {
 
     const rec = new SpeechRecognition();
     rec.lang = locale;
-    // continuous=true: không tự động dừng khi người dùng ngừng nói giữa chừng (im lặng để suy nghĩ).
-    // Người dùng tự bấm nút mic lần nữa để báo hiệu đã nói xong — đáng tin cậy hơn suy đoán của trình duyệt.
-    rec.continuous = true;
+    // continuous=true rất chập chờn trên Chrome Android (tự dừng sau vài giây im lặng, đôi khi
+    // lặp lại cả câu vừa nói khi trình duyệt "restart" ngầm). Dùng continuous=false ổn định hơn,
+    // và tự khởi động lại ở onend nếu người dùng CHƯA chủ động bấm dừng — mô phỏng ghi âm liên tục
+    // mà không dính lỗi của continuous=true.
+    rec.continuous = false;
     rec.interimResults = true;
 
     rec.onstart = () => {
-      finalTextRef.current = '';
-      interimTextRef.current = '';
+      // Chỉ reset dữ liệu của chu kỳ hiện tại — sessionTextRef (nội dung các chu kỳ trước) phải giữ nguyên
+      cycleFinalRef.current = '';
+      cycleInterimRef.current = '';
       setListening(true);
-      setInterimText('');
     };
     rec.onresult = (event) => {
-      // Ở chế độ continuous, event.results chứa toàn bộ lịch sử của phiên nghe (các đoạn đã "final" cộng đoạn đang nói dở)
+      // event.results chỉ chứa nội dung của CHU KỲ hiện tại (trình duyệt reset khi start() lại)
       let finalText = '';
       let interim = '';
       for (let i = 0; i < event.results.length; i++) {
@@ -100,30 +107,43 @@ export function useSpeech({ locale, onTranscript, onError }) {
         if (r.isFinal) finalText += r[0].transcript;
         else interim += r[0].transcript;
       }
-      finalTextRef.current = finalText;
-      interimTextRef.current = interim;
-      setInterimText(interim);
+      cycleFinalRef.current = finalText;
+      cycleInterimRef.current = interim;
+      // Hiển thị: những gì đã chốt ở các chu kỳ trước + nội dung đang nói ở chu kỳ này
+      const preview = [sessionTextRef.current, finalText, interim].filter(Boolean).join(' ');
+      setInterimText(preview);
     };
     rec.onerror = (event) => {
-      // 'no-speech' và 'aborted' là tình huống bình thường, không cần báo lỗi
+      // 'no-speech' và 'aborted' là tình huống bình thường (kể cả khi tự khởi động lại), không cần báo lỗi
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
         callbacksRef.current.onError?.(event);
       }
     };
     rec.onend = () => {
-      setListening(false);
-      setInterimText('');
-      // Gửi toàn bộ transcript đã gom được khi phiên nghe thực sự kết thúc (do người dùng bấm dừng)
-      const finalText = (finalTextRef.current + ' ' + interimTextRef.current).trim();
-      finalTextRef.current = '';
-      interimTextRef.current = '';
-      if (finalText) {
-        callbacksRef.current.onTranscript?.(finalText);
+      // Gộp nội dung chu kỳ vừa kết thúc vào transcript tổng của cả phiên
+      const cycleText = (cycleFinalRef.current + ' ' + cycleInterimRef.current).trim();
+      if (cycleText) {
+        sessionTextRef.current = sessionTextRef.current ? `${sessionTextRef.current} ${cycleText}` : cycleText;
+      }
+      cycleFinalRef.current = '';
+      cycleInterimRef.current = '';
+
+      if (manualStopRef.current) {
+        // Người dùng đã bấm dừng — kết thúc phiên nghe thật sự, gửi toàn bộ transcript đã gom
+        setListening(false);
+        setInterimText('');
+        const finalText = sessionTextRef.current.trim();
+        sessionTextRef.current = '';
+        if (finalText) callbacksRef.current.onTranscript?.(finalText);
+      } else {
+        // Trình duyệt tự dừng do đoán im lặng nhưng người dùng chưa bấm dừng — âm thầm nghe lại ngay
+        try { rec.start(); } catch { setListening(false); }
       }
     };
 
     recognitionRef.current = rec;
     return () => {
+      manualStopRef.current = true;
       try { rec.abort(); } catch {}
       recognitionRef.current = null;
     };
@@ -135,10 +155,14 @@ export function useSpeech({ locale, onTranscript, onError }) {
     // Đang phát TTS thì dừng để tránh mic thu tiếng máy
     try { window.speechSynthesis?.cancel(); } catch {}
     setSpeaking(false);
+    manualStopRef.current = false;
+    sessionTextRef.current = '';
+    setInterimText('');
     try { rec.start(); } catch {} // start() ném lỗi nếu đang chạy — bỏ qua
   }, []);
 
   const stopListening = useCallback(() => {
+    manualStopRef.current = true;
     try { recognitionRef.current?.stop(); } catch {}
   }, []);
 
