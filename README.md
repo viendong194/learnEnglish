@@ -16,22 +16,24 @@ App cá nhân giúp bạn **mở miệng nói mỗi ngày**: hội thoại bằn
 
 ```bash
 npm install
-cp .env.example .env.local   # rồi điền OPENROUTER_API_KEY, APP_USERNAME, APP_PASSWORD
+cp .env.example .env.local   # rồi điền GEMINI_API_KEY, APP_USERNAME, APP_PASSWORD
 npm run dev
 ```
 
-Tạo OpenRouter API key tại [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
+Tạo Gemini API key miễn phí tại [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
 
-## Chọn model AI
+## Nhiều API key dự phòng
 
-App gọi AI qua [OpenRouter](https://openrouter.ai) nên có thể đổi model tuỳ ý bằng biến môi trường, không cần sửa code:
+Nếu 1 key Gemini bị lỗi (sai key, hết quota, bị chặn truy cập), app tự động chuyển sang key tiếp theo — không cần thao tác gì thêm, người dùng chỉ thấy chậm hơn đôi chút chứ không bị báo lỗi.
 
-- `OPENROUTER_MODEL` — model cho hội thoại, mặc định `google/gemini-2.5-flash` (rẻ, nhanh, tiếng Nhật tốt). Xem danh sách tại [openrouter.ai/models](https://openrouter.ai/models); các model có hậu tố `:free` dùng miễn phí (có rate limit).
-- `OPENROUTER_VIDEO_MODEL` — model phân tích video YouTube, mặc định `google/gemini-2.5-flash`. **Phải là model Gemini** vì chỉ Gemini (qua provider Google AI Studio) đọc được YouTube URL trực tiếp.
+- Tạo thêm 1-2 key Gemini miễn phí nữa (dùng tài khoản Google khác nhau tại [aistudio.google.com/apikey](https://aistudio.google.com/apikey)).
+- Đặt biến `GEMINI_API_KEYS` (số nhiều), phân tách bằng dấu phẩy: `GEMINI_API_KEYS=key-1,key-2,key-3`. Khi đặt biến này, `GEMINI_API_KEY` (số ít) sẽ bị bỏ qua.
+- Chỉ tự động chuyển key khi lỗi liên quan đến bản thân key (sai key, hết quota, bị từ chối quyền truy cập) — lỗi do request/schema sai sẽ báo ngay vì thử key khác cũng không giải quyết được.
+- Đổi model qua `GEMINI_MODEL` nếu muốn, mặc định `gemini-2.5-flash` (rẻ, nhanh, tiếng Nhật tốt, và là model duy nhất đọc được YouTube URL trực tiếp).
 
 ## Đăng nhập
 
-App có 1 màn hình đăng nhập chặn toàn bộ trang (kể cả API) — chỉ ai biết đúng username/password mới dùng được, tránh người lạ dùng ké credit OpenRouter của bạn nếu link bị lộ.
+App có 1 màn hình đăng nhập chặn toàn bộ trang (kể cả API) — chỉ ai biết đúng username/password mới dùng được, tránh người lạ dùng ké quota Gemini của bạn nếu link bị lộ.
 
 - Tự chọn 1 cặp username/password bất kỳ, điền vào biến môi trường `APP_USERNAME` và `APP_PASSWORD` (local: `.env.local`; Vercel: Project Settings → Environment Variables).
 - Không có tài khoản mặc định — nếu chưa cấu hình 2 biến này, app sẽ luôn báo "Đăng nhập thất bại".
@@ -44,10 +46,10 @@ App có 1 màn hình đăng nhập chặn toàn bộ trang (kể cả API) — c
    git add -A && git commit -m "feat: voice tutor app" && git push
    ```
 2. Vào [vercel.com/new](https://vercel.com/new) → Import repo này (framework tự nhận Next.js, không cần chỉnh gì).
-3. Ở bước cấu hình, thêm Environment Variables: `OPENROUTER_API_KEY`, `APP_USERNAME`, `APP_PASSWORD`.
+3. Ở bước cấu hình, thêm Environment Variables: `GEMINI_API_KEY` (hoặc `GEMINI_API_KEYS` nếu dùng nhiều key), `APP_USERNAME`, `APP_PASSWORD`.
 4. Deploy. Mở link trên điện thoại → đăng nhập → menu trình duyệt → **Thêm vào màn hình chính**.
 
-Hoặc dùng CLI: `npx vercel --prod` (nhớ `npx vercel env add OPENROUTER_API_KEY`, `APP_USERNAME`, `APP_PASSWORD`).
+Hoặc dùng CLI: `npx vercel --prod` (nhớ `npx vercel env add GEMINI_API_KEY`, `APP_USERNAME`, `APP_PASSWORD`).
 
 ## Lưu ý khi dùng trên điện thoại
 
@@ -59,7 +61,7 @@ Hoặc dùng CLI: `npx vercel --prod` (nhớ `npx vercel env add OPENROUTER_API_
 ## Kiến trúc
 
 - **Next.js 14 (App Router)** — 3 màn hình: Trang chủ (chọn ngôn ngữ + chủ đề), Hội thoại, Sổ tay
-- **API routes** (`app/api/chat`, `app/api/topic`) gọi LLM qua **OpenRouter** (`lib/llm.js`, mặc định Gemini 2.5 Flash) với structured output (JSON schema); API key chỉ nằm ở server
+- **API routes** (`app/api/chat`, `app/api/topic`) gọi trực tiếp **Google Gemini API** (`lib/llm.js`, mặc định `gemini-2.5-flash`) với structured output (response schema); tự động xoay vòng nhiều key qua `GEMINI_API_KEYS` khi key hiện tại lỗi; API key chỉ nằm ở server
 - **Dexie (IndexedDB)** — lưu phiên hội thoại, từ vựng, ngữ pháp ngay trên thiết bị
 - **Web Speech API** — SpeechRecognition (nói) + SpeechSynthesis (nghe), hỗ trợ `en-US` và `ja-JP`
 - **middleware.js** — chặn mọi request chưa đăng nhập (trừ `/login`, `/api/login`, `/api/logout`), xác thực qua cookie HMAC-signed (`lib/auth.js`), không cần database
